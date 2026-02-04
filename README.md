@@ -1,6 +1,3 @@
-Below is a professionally structured `README.md` for your GitHub repository. It includes sections for project overview, setup instructions, and a technical breakdown of how the script functions.
-
-***
 
 # Utility Manager: Automation for Electricity, Water, & LPG
 
