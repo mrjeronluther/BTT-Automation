@@ -1,87 +1,98 @@
+# MCD Bill to Tenant Manager Automator ⚡💧🔥
 
-# Utility Manager: Automation for Electricity, Water, & LPG
+A comprehensive Google Apps Script solution designed to automate data fetching, formula injection, variance analysis, and multi-layered summation for Utility management (Electricity, Water, and LPG). 
 
-This repository contains a Google Apps Script designed to automate the management, calculation, and reporting of utility data (Electricity, Water, and LPG) within Google Sheets. It bridges the gap between raw data sources and financial reporting by automating complex calculations and data validation.
+This tool synchronizes data from external sources and handles complex accounting calculations across specific property sectors.
 
-## 🚀 Features
+## 🚀 Key Features
 
-*   **Multi-Utility Support:** Dedicated workflows for Electricity (`Elec`), Water, and LPG.
-*   **Dynamic Data Fetching:** Imports data from external source spreadsheets based on links provided directly in the sheet.
-*   **Smart Calculations:** 
-    *   Applies conditional formulas for Fixed Rates, Special Rates, and Theoretical readings.
-    *   Protects manual overrides (the script identifies and skips cells that shouldn't be overwritten).
-*   **Data Integrity Scanning:** Highlights missing required data and logs variance issues.
-*   **Master DB Submission:** Exports active PBTT records to a centralized master database with a single click.
-*   **Custom UI:** Adds a "Utility Manager" menu to the Google Sheets interface for ease of use.
-
----
-
-## 🛠️ Setup Instructions
-
-### 1. Prepare your Google Sheet
-Ensure your Google Sheet has three tabs named exactly:
-*   `Elec`
-*   `Water`
-*   `LPG`
-
-Each tab must have:
-*   **Cell A5:** The URL of the Source Spreadsheet where raw data is located.
-*   **Cell L5:** The Base Rate/Price Reference.
-*   **Cell L6:** The Secondary Reference (e.g., Discount or specific Multiplier).
-*   **Headers on Row 12** and **Data starting on Row 13**.
-
-### 2. Install the Script
-1.  In your Google Sheet, go to **Extensions** > **Apps Script**.
-2.  Delete any existing code in the editor (`Code.gs`).
-3.  Copy the code from the script file in this repository and paste it into the editor.
-4.  Update the **Configuration Constants** at the top of the script:
-    *   `SOURCE_DB_URL`: Default source spreadsheet link.
-    *   `PBTT_DB_ID`: The File ID of the master spreadsheet where "Submit" data will be sent.
-5.  Click the **Save** (💾) icon and rename the project to "Utility Manager".
-
-### 3. Authorization
-1.  Refresh your Google Sheet.
-2.  A new menu named **Utility Manager** will appear.
-3.  Click any function (e.g., *Utility Manager > Electricity > Scan Tab*).
-4.  Google will prompt for permissions. Select your account, click "Advanced," and click "Go to Utility Manager (unsafe)" to grant access.
+*   **Dynamic Data Syncing**: Fetches data from external spreadsheets based on URL links provided in cell `A1` of each utility tab.
+*   **Intelligent Formula Injection**: Automatically applies accounting formulas to columns while skipping rows with existing "Fix Rates" or manual entries.
+*   **Automatic Sub-Totalling & Grand Totals**: A recursive algorithm that scans Column A for "Sub Total" labels, sums the preceding block, and aggregates them into a final "Total" row.
+*   **Mathematical Variance Correction**: Instead of summing percentages (which results in errors), the script recalculates variance percentages at the sub-total level for mathematical accuracy.
+*   **Smart Variance Scanner**: Scans data for anomalies (variances outside ±30%) and generates an automated issue log in a separate `IssueLogs` tab.
+*   **Audit Logging**: Submits active records to a centralized master database with user and timestamp tracking.
 
 ---
 
-## 📖 How it Works
+## 🛠️ Configuration & Setup
 
-### 1. The Menu (onOpen)
-The `onOpen` function automatically builds a nested menu in your toolbar. This allows users to trigger specific utility workflows without touching the script.
+To use this script, ensure the following constants in the code match your spreadsheet environment:
 
-### 2. Fetch Data (`fetchDataOnly`)
-This function looks at **Cell A5** in the active tab, opens that external spreadsheet, and pulls the relevant utility data.
-*   **Protection Logic:** It automatically skips specific columns (K, L, O, P, Z) to ensure it doesn't overwrite manual inputs or specific formulas existing in the destination sheet.
-*   **Auto-Limit:** The script stops importing once it detects a row starting with the word "TOTAL."
+```javascript
+const SOURCE_DB_URL = "YOUR_SOURCE_LINK";
+const PBTT_DB_ID    = "YOUR_DATABASE_ID";
 
-### 3. Run Formulas (`applyFormulasToSheet`)
-This is the core logic engine. Based on whether you are on the Electricity, Water, or LPG tab, the script injects appropriate formulas starting from row 13.
-*   **Conditions:** It checks column values (like "fix rate" or "special rate") to decide which formulas to apply to which columns.
-*   **Overlap Safety:** It includes "Overwrite Protection," ensuring that if a user has manually entered data in columns `O` (Rate) or `Z`, the automation will not overwrite it.
+const CONFIG = {
+  headerRow: 12,      // Where the column labels live
+  dataStartRow: 13,   // Where the utility entries start
+  minCols: 34         // Minimum column width for the logic
+};
+```
 
-### 4. Scan and Validate
-*   **Scan Tab:** Checks required columns (5, 11, 31, 34) for empty values and highlights them in yellow.
-*   **Issue Logging:** Monitors variances. If utility usage exceeds or drops below 30% compared to previous months, it logs an entry into an "IssueLogs" tab.
-
-### 5. Submit PBTT (`recordActivePBTT`)
-Takes the summary values from cells `E1`, `E2`, `E4`, and `E5` of your current tab and appends them as a new row in a centralized master database (`PBTT_DB_ID`). It also logs the user who submitted it and a timestamp.
+### Required Columns in Sheet
+The script relies on a specific layout starting from **Row 12 (Headers)**:
+*   **Column A**: Identifier (e.g., Shop Name, "Sub Total", or "Total").
+*   **Columns J - AK**: Contain specific values like Rates, Consumption (J, K, L), Previous Readings (AF), and calculated Variances (AG, AH, AJ, AK).
 
 ---
 
-## ⚙️ Configuration Reference
+## 📈 Operational Workflow
 
-| Variable | Description | Default/Example |
+### 1. Fetch Data
+*   The script reads the URL from cell **A1**.
+*   It clears existing data below Row 12 and imports fresh rows.
+*   It performs **dynamic mapping**: translating source columns to specific target columns (e.g., Source L to Target AF).
+
+### 2. Run Formulas
+*   Injects calculation logic into every row.
+*   **Conditional Skipping**: If "fix rate" is found in columns O, P, or Z, the script preserves manual inputs.
+*   **Theoretical Adjustments**: Specifically handles "Theoretical" entries in Column K to prevent formula errors.
+
+### 3. Automated Summation Engine
+This is the core logic that handles your sub-totals:
+1.  **Search Phase**: Locates "Sub Total" and "Total" labels in Column A.
+2.  **Partitioning**: Divides the sheet into blocks between Sub Totals.
+3.  **Summation**: Injects `=SUM(Start:End)` formulas for all numerical value columns.
+4.  **Recalculation**: For Variance %, it applies the division formula: `Amount Variance / Previous Total` rather than summing percentages.
+5.  **Grand Total**: Aggregates only the "Sub Total" cells into the final "Total" row to prevent double-counting.
+
+### 4. Scan Tab
+*   Reviews Columns **AH** and **AK**.
+*   If any variance is **> 30%** or **< -30%**, the cell is highlighted Red.
+*   The issue is automatically logged into the **IssueLogs** sheet with a timestamp and specific cell reference.
+
+---
+
+## 🧮 Calculation Logic
+
+| Column | Name | Logic |
 | :--- | :--- | :--- |
-| `headerRow` | Row number where your headers live. | `12` |
-| `dataStartRow` | Row where the data actually begins. | `13` |
-| `SOURCE_DB_URL` | Primary URL for source fetching. | *Your Sheet URL* |
-| `PBTT_DB_ID` | File ID for the master destination DB. | *Alphanumeric ID from URL* |
+| **L** | Total Consumption | `(Current - Previous) * Multiplier` |
+| **P** | Calculated Amount | `Consumption * Rate` (unless "fix rate") |
+| **Q** | Amount + VAT | `Amount * 1.12` |
+| **AH** | Cons. Var % | `(Current Cons - Historical Cons) / Historical` |
+| **AK** | Amount Var % | `(Current Amount - Historical Amount) / Historical` |
 
 ---
 
-## ⚠️ Requirements
-*   **Editor Permissions:** You must have edit access to both the Utility sheet and the Source/Database sheets.
-*   **Structure:** Do not change tab names (`Elec`, `Water`, `LPG`), or the calculation logic may fail.
+## 💻 Technical Details
+
+*   **Language**: Google Apps Script (JavaScript-based).
+*   **Permissions**: Requires `SpreadsheetApp` and `DriveApp` scope for cross-workbook operations.
+*   **Trigger**: Custom Menu in Google Sheets UI (`Utility Manager`).
+
+---
+
+## 🛠 Developer Usage
+To contribute or modify:
+1.  Open the Google Sheet.
+2.  Go to `Extensions` > `Apps Script`.
+3.  Paste the contents of `CODE.gs` into the editor.
+4.  Save and refresh the Spreadsheet.
+
+---
+
+### Author
+[Your Name/Organization]
+*Maintained for Property Management and Utility Tracking workflows.*
