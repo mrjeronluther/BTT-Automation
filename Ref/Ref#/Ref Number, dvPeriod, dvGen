@@ -1,0 +1,169 @@
+/**
+ * MASTER FUNCTION: INITIALIZE
+ * For manual syncing and checking Ref#.
+ */
+function INITIALIZE_SYSTEM_BUTTON() {
+  const ui = SpreadsheetApp.getUi();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  ss.toast("🔄 Syncing databases and checking Ref#...", "System Status", 3);
+
+  try {
+    syncDataAcrossFiles();
+    generateUniqueAlphanumericRef(); // This function will exit if C7 is already filled.
+    ui.alert("✅ SYSTEM INITIALIZED\n\nDatabase Tabs updated and Ref# verified.");
+  } catch (e) {
+    ui.alert("❌ Error during initialization: " + e.message);
+  }
+}
+
+/**
+ * INSTALLER FUNCTION
+ * This performs the one-time setup and immediate data sync.
+ */
+function INSTALL_SYSTEM() {
+  const ui = SpreadsheetApp.getUi();
+  
+  try {
+    // 1. Force immediate data overwrite for data-only tabs
+    syncDataAcrossFiles();
+    
+    // 2. Try to generate Ref#. If C7 is already filled, this does nothing.
+    generateUniqueAlphanumericRef();
+
+    // 3. REMOVE the Trigger (so it no longer runs on open)
+    const functionName = 'runStartupSequence';
+    const triggers = ScriptApp.getProjectTriggers();
+    // This loops through and deletes the trigger
+    triggers.forEach(t => { 
+      if (t.getHandlerFunction() === functionName) {
+        ScriptApp.deleteTrigger(t); 
+      }
+    });
+
+    /* 
+      I REMOVED THE ScriptApp.newTrigger(...) PART HERE
+    */
+
+    ui.alert("🚀 UPDATE COMPLETE\n\n- Tabs 'dvPeriod' and 'dvGen' overwritten.\n- Ref# is secured in cell C7.\n- On-open startup sequence has been REMOVED.");
+    
+  } catch (e) {
+    ui.alert("❌ Action Failed: " + e.message);
+  }
+}
+
+/**
+ * STARTUP SEQUENCE
+ */
+function runStartupSequence() {
+  syncDataAcrossFiles();
+  generateUniqueAlphanumericRef();
+}
+
+/**
+ * 1. SYNC DATA ACROSS FILES (RESTRICTED TO DATA TABS ONLY)
+ * Clears and overwrites specific tabs. Does NOT touch the 'Instructions' sheet.
+ */
+function syncDataAcrossFiles() {
+  const sourceId = "1hMMUd4ho50HP63dc2fRAo--iK-m7YotamkKtsDGT_Us";
+  const targetSS = SpreadsheetApp.getActiveSpreadsheet(); 
+  
+  // Define only the specific tabs meant to be overwritten
+  const tabsToSync = ["dvPeriod", "dvGen"]; 
+  const timeZone = Session.getScriptTimeZone();
+
+  const lock = LockService.getScriptLock();
+  try {
+    if (!lock.tryLock(15000)) throw new Error("Database is busy."); 
+
+    const sourceSS = SpreadsheetApp.openById(sourceId);
+
+    tabsToSync.forEach(tabName => {
+      const sourceSheet = sourceSS.getSheetByName(tabName);
+      const targetSheet = targetSS.getSheetByName(tabName);
+
+      if (sourceSheet && targetSheet) {
+        let sourceRange = sourceSheet.getDataRange();
+        let sourceData = sourceRange.getValues();
+        const numRows = sourceData.length;
+        const numCols = sourceData[0].length;
+        
+        if (numRows > 0) {
+          // Date Formatting
+          if (numRows > 1) { 
+            for (let i = 1; i < numRows; i++) {
+              if (sourceData[i][0] instanceof Date) sourceData[i][0] = Utilities.formatDate(sourceData[i][0], timeZone, "MMM d, yyyy");
+              if (tabName === "dvPeriod") {
+                if (sourceData[i][1] instanceof Date) sourceData[i][1] = Utilities.formatDate(sourceData[i][1], timeZone, "MMM d, yyyy");
+                if (sourceData[i][2] instanceof Date) sourceData[i][2] = Utilities.formatDate(sourceData[i][2], timeZone, "MMM d, yyyy");
+              }
+            }
+          }
+
+          // FULL OVERWRITE: This ONLY affects dvPeriod or dvGen.
+          // Cell C7 on Instructions sheet remains safe.
+          targetSheet.clear(); 
+          
+          if (targetSheet.getMaxRows() < numRows) targetSheet.insertRowsAfter(targetSheet.getMaxRows(), numRows - targetSheet.getMaxRows());
+          if (targetSheet.getMaxColumns() < numCols) targetSheet.insertColumnsAfter(targetSheet.getMaxColumns(), numCols - targetSheet.getMaxColumns());
+
+          targetSheet.getRange(1, 1, numRows, numCols).setValues(sourceData);
+        }
+      }
+    });
+    SpreadsheetApp.flush();
+  } finally {
+    if (lock.hasLock()) lock.releaseLock();
+  }
+}
+
+/**
+ * 2. GENERATE PERMANENT REF# (PERSISTENT LOGIC)
+ */
+function generateUniqueAlphanumericRef() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const instSheet = ss.getSheetByName("Instructions");
+  if (!instSheet) return;
+
+  const cell = instSheet.getRange("C7");
+  const existingRef = cell.getValue().toString().trim();
+  
+  // SAFETY GATE: If the cell has any value at all, stop everything.
+  // This ensures the Ref# is only generated ONCE per file life cycle.
+  if (existingRef !== "" && existingRef !== null) {
+    console.log("Ref# already exists. Generation skipped to prevent overwrite.");
+    return; 
+  }
+
+  const masterId = "1hMMUd4ho50HP63dc2fRAo--iK-m7YotamkKtsDGT_Us";
+  try {
+    const masterSS = SpreadsheetApp.openById(masterId);
+    const dbSheet = masterSS.getSheetByName("PBTT Submission");
+    const lastRow = dbSheet.getLastRow();
+    
+    let existingRefs = new Set();
+    if (lastRow >= 5) {
+      const data = dbSheet.getRange(5, 11, lastRow - 4, 1).getValues();
+      existingRefs = new Set(data.flat().map(v => String(v).trim()));
+    }
+
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let newRef = "";
+    let isUnique = false;
+
+    while (!isUnique) {
+      let result = "";
+      for (let i = 0; i < 6; i++) result += chars.charAt(Math.floor(Math.random() * chars.length));
+      newRef = "Ref#" + result;
+      if (!existingRefs.has(newRef)) isUnique = true;
+    }
+    
+    // Final check before setting
+    if (cell.getValue().toString().trim() === "") {
+       cell.setValue(newRef);
+    }
+    
+  } catch (e) {
+    console.error("Ref# Gen Error: " + e.toString());
+  }
+}
