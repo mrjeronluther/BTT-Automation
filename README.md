@@ -1,4 +1,4 @@
-# 🏗️ BTT-Automation - MCD Bill to Tenant Manager Automator
+# BTT-Automation - MCD Bill to Tenant Manager Automator
 
 > A comprehensive Google Apps Script solution for automating utility bill management, formula injection, variance analysis, and multi-layered summation across property files.
 
