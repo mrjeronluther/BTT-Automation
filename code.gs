@@ -1041,7 +1041,7 @@ function recordActivePBTT() {
       // RULE 3: Expiration Date Reached (And NOT bypassed) -> Block
       else if (expiredDates.length > 0) {
         const uniqueExpired = [...new Set(expiredDates)];
-        ui.alert(`🚫 SUBMISSION BLOCKED\n\nAll 'Active' periods have reached their lock date. Submissions are no longer allowed from these dates onwards:\n- ${uniqueExpired.join("\n- ")}\n\n(Note: An admin can override this by typing 'Bypass' in Column E. \n\n Contact @knceneta@megaworld-lifestyle.com for assistance)`);
+        ui.alert(`🚫 SUBMISSION BLOCKED\n\nAll 'Active' periods have reached their lock date. Submissions are no longer allowed from these dates onwards:\n- ${uniqueExpired.join("\n- ")}\n\n Contact @knceneta@megaworld-lifestyle.com for assistance`);
         return; // Stops execution
       }
       // RULE 4: Current month is actively tagged "Inactive"
@@ -1190,8 +1190,20 @@ function colToIdx(letter) {
  * and checking for correct dates.
  */
 function processSheetHeaders(sheet) {
+
+   const sourceFileUrl = sheet.getRange("A1").getValue().toString().trim();
+    if (sourceFileUrl === "" || !sourceFileUrl.toLowerCase().includes("http")) {
+        SpreadsheetApp.getUi().alert(
+            "🚫 SUBMISSION BLOCKED\n\n" +
+            "A valid SOURCE FILE URL is missing in cell A1.\n" +
+            "Please provide the URL before submitting."
+        );
+        return null; // Stop the process completely
+    }
+
+    
     const config = [
-        { cell: "A1", label: "SOURCE FILE", type: "url" },
+        
         { cell: "E4", label: "PROPERTY NAME", type: "text" },
         { cell: "E6", label: "BILLER/PAYEE COMPANY:", type: "text" },
         { cell: "E5", label: "LOCATION", type: "text", sourceRange: "B13:B" },
